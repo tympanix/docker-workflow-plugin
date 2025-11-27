@@ -240,10 +240,11 @@ public class DockerDSLTest {
                 WorkflowJob p = story.j.jenkins.createProject(WorkflowJob.class, "prj");
                 p.setDefinition(new CpsFlowDefinition(
                     "def r = docker.image('httpd:2.4.62').withRun {c ->\n" +
-                    "  c.inside {\n" +
+                    "  def result = c.inside {\n" +
                     "    sh 'cat /usr/local/apache2/conf/extra/httpd-userdir.conf'\n" +
+                    "    42\n" +
                     "  }\n" +
-                    "  42\n" +
+                    "  result\n" +
                     "}; echo \"the answer is ${r}\"", true));
                 WorkflowRun b = story.j.assertBuildStatusSuccess(p.scheduleBuild2(0));
                 story.j.assertLogContains("Require method GET POST OPTIONS", b);
