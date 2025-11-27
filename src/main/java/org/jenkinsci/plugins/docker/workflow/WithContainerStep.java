@@ -77,18 +77,21 @@ import java.util.stream.Collectors;
 public class WithContainerStep extends AbstractStepImpl {
     
     private static final Logger LOGGER = Logger.getLogger(WithContainerStep.class.getName());
-    private final @NonNull String image;
+    private String image;
     private String args;
     private String toolName;
     private String containerId;
 
-    @DataBoundConstructor public WithContainerStep(@NonNull String image) {
-        this.image = image;
+    @DataBoundConstructor public WithContainerStep() {
     }
 
-    @NonNull
+    @CheckForNull
     public String getImage() {
         return image;
+    }
+
+    @DataBoundSetter public void setImage(String image) {
+        this.image = Util.fixEmpty(image);
     }
 
     @CheckForNull
@@ -140,6 +143,14 @@ public class WithContainerStep extends AbstractStepImpl {
         }
 
         @Override public boolean start() throws Exception {
+            // Validate that either image or containerId is provided
+            if (step.image == null && step.containerId == null) {
+                throw new AbortException("Either 'image' or 'containerId' must be specified");
+            }
+            if (step.image != null && step.containerId != null) {
+                throw new AbortException("Only one of 'image' or 'containerId' should be specified, not both");
+            }
+
             EnvVars envReduced = new EnvVars(env);
             EnvVars envHost = computer.getEnvironment();
             envReduced.entrySet().removeAll(envHost.entrySet());
