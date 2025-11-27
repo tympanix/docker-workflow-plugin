@@ -94,7 +94,6 @@ public class WithRunningContainerStep extends AbstractStepImpl {
         @Override
         public boolean start() throws Exception {
             EnvVars envHost = computer.getEnvironment();
-            workspace.mkdirs();
             String ws = getPath(workspace);
             toolName = step.toolName;
 
