@@ -34,16 +34,13 @@ import hudson.LauncherDecorator;
 import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Node;
-import hudson.model.TaskListener;
 import hudson.util.VersionNumber;
 import org.jenkinsci.plugins.docker.workflow.client.DockerClient;
 import org.jenkinsci.plugins.docker.workflow.client.WindowsDockerClient;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
-import org.jenkinsci.plugins.workflow.steps.BodyExecutionCallback;
 import org.jenkinsci.plugins.workflow.steps.BodyInvoker;
-import org.jenkinsci.plugins.workflow.steps.StepContext;
 import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -85,7 +82,6 @@ public class WithRunningContainerStep extends AbstractStepImpl {
         private static final long serialVersionUID = 1;
         @Inject(optional = true) private transient WithRunningContainerStep step;
         @StepContextParameter private transient Launcher launcher;
-        @StepContextParameter private transient TaskListener listener;
         @StepContextParameter private transient FilePath workspace;
         @StepContextParameter private transient EnvVars env;
         @StepContextParameter private transient Computer computer;
@@ -107,18 +103,6 @@ public class WithRunningContainerStep extends AbstractStepImpl {
                     : new WindowsDockerClient(launcher, node, toolName);
 
             VersionNumber dockerVersion = dockerClient.version();
-            if (dockerVersion != null) {
-                if (dockerVersion.isOlderThan(new VersionNumber("1.7"))) {
-                    throw new AbortException("The docker version is less than v1.7. Pipeline functions requiring 'docker exec' will not work.");
-                } else if (dockerVersion.isOlderThan(new VersionNumber("1.8"))) {
-                    listener.error("The docker version is less than v1.8. Running inside a container from inside a container will not work.");
-                } else if (dockerVersion.isOlderThan(new VersionNumber("1.13"))) {
-                    if (!launcher.isUnix())
-                        throw new AbortException("The docker version is less than v1.13. Running inside a Windows container will not work.");
-                }
-            } else {
-                listener.error("Failed to parse docker version. Please note there is a minimum docker version requirement of v1.7.");
-            }
 
             // Validate that the container exists and is running
             String runningState = dockerClient.inspect(env, step.containerId, ".State.Running");
@@ -134,7 +118,6 @@ public class WithRunningContainerStep extends AbstractStepImpl {
                     .withContext(BodyInvoker.mergeLauncherDecorators(
                             getContext().get(LauncherDecorator.class),
                             new WithContainerStep.Decorator(step.containerId, envHost, ws, toolName, dockerVersion)))
-                    .withCallback(new NoOpCallback())
                     .start();
             return false;
         }
@@ -150,20 +133,7 @@ public class WithRunningContainerStep extends AbstractStepImpl {
         @Override
         public void stop(@NonNull Throwable cause) throws Exception {
             // Do not stop the container - it is managed externally
-            LOGGER.log(Level.FINE, "withRunningContainer step stopped", cause);
-        }
-    }
-
-    /**
-     * A no-op callback that doesn't destroy the container when finished.
-     * The container lifecycle is managed externally.
-     */
-    private static class NoOpCallback extends BodyExecutionCallback.TailCall {
-        private static final long serialVersionUID = 1;
-
-        @Override
-        protected void finished(StepContext context) throws Exception {
-            // Do nothing - container is managed externally
+            LOGGER.log(Level.FINE, "withRunningDockerContainer step stopped", cause);
         }
     }
 
@@ -176,7 +146,7 @@ public class WithRunningContainerStep extends AbstractStepImpl {
 
         @Override
         public String getFunctionName() {
-            return "withRunningContainer";
+            return "withRunningDockerContainer";
         }
 
         @NonNull

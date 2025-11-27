@@ -211,7 +211,7 @@ class Docker implements Serializable {
 
         public <V> V inside(Closure<V> body) {
             docker.node {
-                docker.script.withRunningContainer(containerId: id, toolName: docker.script.env.DOCKER_TOOL_NAME) {
+                docker.script.withRunningDockerContainer(containerId: id, toolName: docker.script.env.DOCKER_TOOL_NAME) {
                     body()
                 }
             }
