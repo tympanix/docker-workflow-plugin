@@ -233,6 +233,25 @@ public class DockerDSLTest {
         });
     }
 
+    @Test public void containerInside() {
+        story.addStep(new Statement() {
+            @Override public void evaluate() throws Throwable {
+                assumeDocker();
+                WorkflowJob p = story.j.jenkins.createProject(WorkflowJob.class, "prj");
+                p.setDefinition(new CpsFlowDefinition(
+                    "def r = docker.image('httpd:2.4.62').withRun {c ->\n" +
+                    "  c.inside {\n" +
+                    "    sh 'cat /usr/local/apache2/conf/extra/httpd-userdir.conf'\n" +
+                    "  }\n" +
+                    "  42\n" +
+                    "}; echo \"the answer is ${r}\"", true));
+                WorkflowRun b = story.j.assertBuildStatusSuccess(p.scheduleBuild2(0));
+                story.j.assertLogContains("Require method GET POST OPTIONS", b);
+                story.j.assertLogContains("the answer is 42", b);
+            }
+        });
+    }
+
     @Test public void withRunCommand() {
         story.addStep(new Statement() {
             @Override public void evaluate() throws Throwable {
