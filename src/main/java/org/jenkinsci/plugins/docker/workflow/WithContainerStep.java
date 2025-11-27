@@ -77,30 +77,17 @@ import java.util.stream.Collectors;
 public class WithContainerStep extends AbstractStepImpl {
     
     private static final Logger LOGGER = Logger.getLogger(WithContainerStep.class.getName());
-    private String image;
+    private final @NonNull String image;
     private String args;
     private String toolName;
-    private String containerId;
 
-    @DataBoundConstructor public WithContainerStep() {
+    @DataBoundConstructor public WithContainerStep(@NonNull String image) {
+        this.image = image;
     }
 
-    @CheckForNull
+    @NonNull
     public String getImage() {
         return image;
-    }
-
-    @DataBoundSetter public void setImage(String image) {
-        this.image = Util.fixEmpty(image);
-    }
-
-    @CheckForNull
-    public String getContainerId() {
-        return containerId;
-    }
-
-    @DataBoundSetter public void setContainerId(String containerId) {
-        this.containerId = Util.fixEmpty(containerId);
     }
 
     @DataBoundSetter
@@ -143,14 +130,6 @@ public class WithContainerStep extends AbstractStepImpl {
         }
 
         @Override public boolean start() throws Exception {
-            // Validate that either image or containerId is provided
-            if (step.image == null && step.containerId == null) {
-                throw new AbortException("Either 'image' or 'containerId' must be specified");
-            }
-            if (step.image != null && step.containerId != null) {
-                throw new AbortException("Only one of 'image' or 'containerId' should be specified, not both");
-            }
-
             EnvVars envReduced = new EnvVars(env);
             EnvVars envHost = computer.getEnvironment();
             envReduced.entrySet().removeAll(envHost.entrySet());
@@ -181,81 +160,58 @@ public class WithContainerStep extends AbstractStepImpl {
                 listener.error("Failed to parse docker version. Please note there is a minimum docker version requirement of v1.7.");
             }
 
-            // Check if we're using an existing container (containerId provided)
-            boolean useExistingContainer = step.containerId != null;
+            FilePath tempDir = tempDir(workspace);
+            tempDir.mkdirs();
+            String tmp = getPath(tempDir);
 
-            if (useExistingContainer) {
-                // Validate that the container exists and is running
-                String runningState = dockerClient.inspect(env, step.containerId, ".State.Running");
-                if (runningState == null) {
-                    throw new AbortException("Container " + step.containerId + " does not exist");
-                }
-                if (!"true".equals(runningState.trim())) {
-                    throw new AbortException("Container " + step.containerId + " is not running");
-                }
+            Map<String, String> volumes = new LinkedHashMap<String, String>();
+            Collection<String> volumesFromContainers = new LinkedHashSet<String>();
+            Optional<String> containerId = dockerClient.getContainerIdIfContainerized();
+            if (containerId.isPresent()) {
+                listener.getLogger().println(node.getDisplayName() + " seems to be running inside container " + containerId.get());
+                final Collection<String> mountedVolumes = dockerClient.getVolumes(env, containerId.get());
+                final String[] dirs = {ws, tmp};
+                for (String dir : dirs) {
+                    // check if there is any volume which contains the directory
+                    boolean found = false;
+                    for (String vol : mountedVolumes) {
+                        boolean dirStartsWithVol = launcher.isUnix()
+                            ? dir.startsWith(vol) // Linux
+                            : dir.toLowerCase().startsWith(vol.toLowerCase()); // Windows
 
-                // Use the existing container directly without creating a new one
-                container = step.containerId;
-                getContext().newBodyInvoker().
-                        withContext(BodyInvoker.mergeLauncherDecorators(getContext().get(LauncherDecorator.class), new Decorator(container, envHost, ws, toolName, dockerVersion))).
-                        withCallback(new NoOpCallback()).
-                        start();
-            } else {
-                // Original behavior: create a new container from image
-
-                FilePath tempDir = tempDir(workspace);
-                tempDir.mkdirs();
-                String tmp = getPath(tempDir);
-
-                Map<String, String> volumes = new LinkedHashMap<String, String>();
-                Collection<String> volumesFromContainers = new LinkedHashSet<String>();
-                Optional<String> containerId = dockerClient.getContainerIdIfContainerized();
-                if (containerId.isPresent()) {
-                    listener.getLogger().println(node.getDisplayName() + " seems to be running inside container " + containerId.get());
-                    final Collection<String> mountedVolumes = dockerClient.getVolumes(env, containerId.get());
-                    final String[] dirs = {ws, tmp};
-                    for (String dir : dirs) {
-                        // check if there is any volume which contains the directory
-                        boolean found = false;
-                        for (String vol : mountedVolumes) {
-                            boolean dirStartsWithVol = launcher.isUnix()
-                                ? dir.startsWith(vol) // Linux
-                                : dir.toLowerCase().startsWith(vol.toLowerCase()); // Windows
-
-                            if (dirStartsWithVol) {
-                                volumesFromContainers.add(containerId.get());
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            listener.getLogger().println("but " + dir + " could not be found among " + mountedVolumes);
-                            volumes.put(dir, dir);
+                        if (dirStartsWithVol) {
+                            volumesFromContainers.add(containerId.get());
+                            found = true;
+                            break;
                         }
                     }
-                } else {
-                    listener.getLogger().println(node.getDisplayName() + " does not seem to be running inside a container");
-                    volumes.put(ws, ws);
-                    volumes.put(tmp, tmp);
+                    if (!found) {
+                        listener.getLogger().println("but " + dir + " could not be found among " + mountedVolumes);
+                        volumes.put(dir, dir);
+                    }
                 }
-
-                String command = launcher.isUnix() ? "cat" : "cmd.exe";
-                container = dockerClient.run(env, step.image, step.args, ws, volumes, volumesFromContainers, envReduced, dockerClient.whoAmI(), /* expected to hang until killed */ command);
-                final List<String> ps = dockerClient.listProcess(env, container);
-                if (!ps.contains(command)) {
-                    listener.error(
-                        "The container started but didn't run the expected command. " +
-                            "Please double check your ENTRYPOINT does execute the command passed as docker run argument, " +
-                            "as required by official docker images (see https://github.com/docker-library/official-images#consistency for entrypoint consistency requirements).\n" +
-                            "Alternatively you can force image entrypoint to be disabled by adding option `--entrypoint=''`.");
-                }
-
-                ImageAction.add(step.image, run);
-                getContext().newBodyInvoker().
-                        withContext(BodyInvoker.mergeLauncherDecorators(getContext().get(LauncherDecorator.class), new Decorator(container, envHost, ws, toolName, dockerVersion))).
-                        withCallback(new Callback(container, toolName)).
-                        start();
+            } else {
+                listener.getLogger().println(node.getDisplayName() + " does not seem to be running inside a container");
+                volumes.put(ws, ws);
+                volumes.put(tmp, tmp);
             }
+
+            String command = launcher.isUnix() ? "cat" : "cmd.exe";
+            container = dockerClient.run(env, step.image, step.args, ws, volumes, volumesFromContainers, envReduced, dockerClient.whoAmI(), /* expected to hang until killed */ command);
+            final List<String> ps = dockerClient.listProcess(env, container);
+            if (!ps.contains(command)) {
+                listener.error(
+                    "The container started but didn't run the expected command. " +
+                        "Please double check your ENTRYPOINT does execute the command passed as docker run argument, " +
+                        "as required by official docker images (see https://github.com/docker-library/official-images#consistency for entrypoint consistency requirements).\n" +
+                        "Alternatively you can force image entrypoint to be disabled by adding option `--entrypoint=''`.");
+            }
+
+            ImageAction.add(step.image, run);
+            getContext().newBodyInvoker().
+                    withContext(BodyInvoker.mergeLauncherDecorators(getContext().get(LauncherDecorator.class), new Decorator(container, envHost, ws, toolName, dockerVersion))).
+                    withCallback(new Callback(container, toolName)).
+                    start();
             return false;
         }
 
@@ -282,7 +238,7 @@ public class WithContainerStep extends AbstractStepImpl {
 
     }
 
-    private static class Decorator extends LauncherDecorator implements Serializable {
+    static class Decorator extends LauncherDecorator implements Serializable {
 
         private static final long serialVersionUID = 1;
         private final String container;
@@ -474,20 +430,6 @@ public class WithContainerStep extends AbstractStepImpl {
             if (launcher != null) {
                 destroy(container, launcher, context.get(Node.class), context.get(EnvVars.class), toolName);
             }
-        }
-
-    }
-
-    /**
-     * A no-op callback that doesn't destroy the container when finished.
-     * Used when running inside an existing container that should not be stopped.
-     */
-    private static class NoOpCallback extends BodyExecutionCallback.TailCall {
-
-        private static final long serialVersionUID = 1;
-
-        @Override protected void finished(StepContext context) throws Exception {
-            // Do nothing - container is managed externally
         }
 
     }

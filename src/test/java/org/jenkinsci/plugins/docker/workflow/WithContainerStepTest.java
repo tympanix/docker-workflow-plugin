@@ -94,8 +94,7 @@ public class WithContainerStepTest {
     @Test public void configRoundTrip() {
         story.addStep(new Statement() {
             @Override public void evaluate() throws Throwable {
-                WithContainerStep s1 = new WithContainerStep();
-                s1.setImage("java");
+                WithContainerStep s1 = new WithContainerStep("java");
                 s1.setArgs("--link db:db");
                 story.j.assertEqualDataBoundBeans(s1, new StepConfigTester(story.j).configRoundTrip(s1));
                 story.j.jenkins.getDescriptorByType(DockerTool.DescriptorImpl.class).setInstallations(new DockerTool("docker15", "/usr/local/docker15", Collections.<ToolProperty<?>>emptyList()));
