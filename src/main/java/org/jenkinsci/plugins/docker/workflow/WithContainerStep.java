@@ -174,6 +174,15 @@ public class WithContainerStep extends AbstractStepImpl {
             boolean useExistingContainer = step.containerId != null;
 
             if (useExistingContainer) {
+                // Validate that the container exists and is running
+                String runningState = dockerClient.inspect(env, step.containerId, ".State.Running");
+                if (runningState == null) {
+                    throw new AbortException("Container " + step.containerId + " does not exist");
+                }
+                if (!"true".equals(runningState.trim())) {
+                    throw new AbortException("Container " + step.containerId + " is not running");
+                }
+
                 // Use the existing container directly without creating a new one
                 container = step.containerId;
                 getContext().newBodyInvoker().
