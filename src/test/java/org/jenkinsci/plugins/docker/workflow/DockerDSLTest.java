@@ -253,6 +253,23 @@ public class DockerDSLTest {
         });
     }
 
+    @Test public void containerInsideNonExistingContainer() {
+        story.addStep(new Statement() {
+            @Override public void evaluate() throws Throwable {
+                assumeDocker();
+                WorkflowJob p = story.j.jenkins.createProject(WorkflowJob.class, "prj");
+                p.setDefinition(new CpsFlowDefinition(
+                    "node {\n" +
+                    "  docker.container('nonexistent-container-id').inside {\n" +
+                    "    sh 'echo hello'\n" +
+                    "  }\n" +
+                    "}", true));
+                WorkflowRun b = story.j.assertBuildStatus(Result.FAILURE, p.scheduleBuild2(0));
+                story.j.assertLogContains("does not exist", b);
+            }
+        });
+    }
+
     @Test public void withRunCommand() {
         story.addStep(new Statement() {
             @Override public void evaluate() throws Throwable {

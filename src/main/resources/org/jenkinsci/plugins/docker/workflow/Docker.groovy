@@ -75,6 +75,13 @@ class Docker implements Serializable {
         new Image(this, id)
     }
 
+    public Container container(String id) {
+        node {
+            def isUnix = script.isUnix()
+            new Container(this, id, isUnix)
+        }
+    }
+
     private Object shell(boolean isUnix, Object args) {
         isUnix ? script.sh(args) : script.bat(args)
     }
