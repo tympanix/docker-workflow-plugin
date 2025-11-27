@@ -260,7 +260,7 @@ public class DockerDSLTest {
                 WorkflowJob p = story.j.jenkins.createProject(WorkflowJob.class, "prj");
                 p.setDefinition(new CpsFlowDefinition(
                     "node {\n" +
-                    "  docker.container('nonexistent-container-id').inside {\n" +
+                    "  withRunningDockerContainer(containerId: 'nonexistent-container-id') {\n" +
                     "    sh 'echo hello'\n" +
                     "  }\n" +
                     "}", true));
