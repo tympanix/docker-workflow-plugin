@@ -268,6 +268,7 @@ public class WithContainerStep extends AbstractStepImpl {
                         throw new IOException(x);
                     }
                     List<String> prefix = new ArrayList<>(Arrays.asList(executable, "exec", "-i"));
+                    // Masks for prefix elements (docker, exec, -i) - false means don't mask
                     List<Boolean> masksPrefixList = new ArrayList<>(Arrays.asList(false, false, false));
                     LOGGER.log(Level.INFO, "Launching docker exec with container: {0}", container);
                     if (ws != null) {
@@ -353,7 +354,7 @@ public class WithContainerStep extends AbstractStepImpl {
                     }
                     starter.cmds(cmds);
 
-                    LOGGER.log(Level.INFO, "Docker exec command: {0}", cmds);
+                    LOGGER.log(Level.FINE, "Docker exec command: {0}", cmds);
 
                     boolean[] masks = new boolean[originalMasks.length + prefix.size()];
                     boolean[] masksPrefix = new boolean[masksPrefixList.size()];
