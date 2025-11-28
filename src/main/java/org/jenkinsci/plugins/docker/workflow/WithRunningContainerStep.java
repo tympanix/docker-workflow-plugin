@@ -97,11 +97,14 @@ public class WithRunningContainerStep extends AbstractStepImpl {
             String ws = getPath(workspace);
             toolName = step.toolName;
 
+            LOGGER.log(Level.INFO, "Starting withRunningDockerContainer step with containerId: {0}", step.containerId);
+
             DockerClient dockerClient = launcher.isUnix()
                     ? new DockerClient(launcher, node, toolName)
                     : new WindowsDockerClient(launcher, node, toolName);
 
             VersionNumber dockerVersion = dockerClient.version();
+            LOGGER.log(Level.INFO, "Docker version: {0}", dockerVersion);
 
             // Validate that the container exists and is running
             String runningState = dockerClient.inspect(env, step.containerId, ".State.Running");
@@ -111,6 +114,8 @@ public class WithRunningContainerStep extends AbstractStepImpl {
             if (!"true".equals(runningState.trim())) {
                 throw new AbortException("Container " + step.containerId + " is not running");
             }
+
+            LOGGER.log(Level.INFO, "Container {0} is running, workspace: {1}", new Object[]{step.containerId, ws});
 
             // Use the Decorator from WithContainerStep to wrap commands with docker exec
             getContext().newBodyInvoker()
