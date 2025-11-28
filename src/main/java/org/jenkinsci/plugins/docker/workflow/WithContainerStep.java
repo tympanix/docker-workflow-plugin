@@ -268,7 +268,7 @@ public class WithContainerStep extends AbstractStepImpl {
                         throw new IOException(x);
                     }
                     List<String> prefix = new ArrayList<>(Arrays.asList(executable, "exec", "-i"));
-                    // Masks for prefix elements (docker, exec, -i) - false means the argument should not be masked
+                    // Masks for prefix elements: [docker executable, 'exec' subcommand, '-i' flag] - false means the argument should not be masked
                     List<Boolean> masksPrefixList = new ArrayList<>(Arrays.asList(false, false, false));
                     LOGGER.log(Level.INFO, "Launching docker exec with container: {0}", container);
                     if (ws != null) {
